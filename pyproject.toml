@@ -1,0 +1,80 @@
+[project]
+name = "ailogassistant"
+version = "1.0.0"
+description = "AI-Powered Log Analytics Assistant with RAG"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["log-analysis", "rag", "ai", "gemini", "nlp"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+dependencies = [
+    "fastapi>=0.104.1",
+    "uvicorn[standard]>=0.24.0",
+    "pydantic>=2.5.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0.1",
+    "google-generativeai>=0.3.1",
+    "numpy>=1.26.2",
+    "sentence-transformers>=2.2.2",
+    "requests>=2.31.0",
+    "python-multipart>=0.0.6",
+]
+
+[project.optional-dependencies]
+frontend = [
+    "streamlit>=1.28.2",
+    "altair<5",
+    "protobuf<5",
+]
+dev = [
+    "pytest>=7.4.3",
+    "pytest-asyncio>=0.21.1",
+    "ruff>=0.1.0",
+    "mypy>=1.7.0",
+]
+
+[project.scripts]
+ailog-backend = "backend.main:main"
+ailog-frontend = "frontend.app:cli_main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/ailogassistant"
+Documentation = "https://github.com/yourusername/ailogassistant/blob/main/README.md"
+Repository = "https://github.com/yourusername/ailogassistant"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend", "frontend"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "B", "ANN", "S", "C90"]
+ignore = ["ANN101", "ANN102", "S101"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
