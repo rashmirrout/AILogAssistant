@@ -14,10 +14,10 @@ def render_sidebar(api_base_url: str):
         api_base_url: Base URL for API requests
     """
     with st.sidebar:
-        st.title("⚙️ Control Panel")
+        st.markdown("### ⚙️ Control Panel")
         
         # Model Selection Section
-        st.subheader("🤖 Model Configuration")
+        st.markdown("**🤖 Models**")
         
         # Get available models
         available_models = st.session_state.get('available_models', {
@@ -97,7 +97,7 @@ def render_sidebar(api_base_url: str):
         st.divider()
         
         # Issue Management Section
-        st.subheader("📁 Issue Management")
+        st.markdown("**📁 Issues**")
         
         # Create new issue
         with st.expander("➕ Create New Issue"):
@@ -156,70 +156,97 @@ def render_sidebar(api_base_url: str):
         
         st.divider()
         
-        # File Upload Section (only if issue selected)
+        # File Upload Section (only if issue selected) - Collapsed by default
         if st.session_state.current_issue:
-            st.subheader("📤 Upload Logs")
+            with st.expander("📤 Upload Logs"):
+                uploaded_files = st.file_uploader(
+                    "Choose log files",
+                    accept_multiple_files=True,
+                    type=['log', 'txt', 'jsonl'],
+                    key="file_uploader",
+                    label_visibility="collapsed"
+                )
+                
+                if uploaded_files:
+                    if st.button("📤 Upload", key="upload_btn", use_container_width=True):
+                        try:
+                            files = [
+                                ("files", (file.name, file.getvalue(), file.type))
+                                for file in uploaded_files
+                            ]
+                            
+                            response = requests.post(
+                                f"{api_base_url}/upload_logs/{st.session_state.current_issue}",
+                                files=files
+                            )
+                            
+                            if response.status_code == 200:
+                                data = response.json()
+                                st.success(f"✅ {data['data']['count']} files")
+                            else:
+                                st.error(f"❌ {response.json().get('detail')}")
+                        except Exception as e:
+                            st.error(f"❌ {str(e)}")
             
-            uploaded_files = st.file_uploader(
-                "Choose log files",
-                accept_multiple_files=True,
-                type=['log', 'txt', 'jsonl'],
-                key="file_uploader"
-            )
-            
-            if uploaded_files:
-                if st.button("Upload Files", key="upload_btn"):
-                    try:
-                        files = [
-                            ("files", (file.name, file.getvalue(), file.type))
-                            for file in uploaded_files
-                        ]
-                        
-                        response = requests.post(
-                            f"{api_base_url}/upload_logs/{st.session_state.current_issue}",
-                            files=files
-                        )
-                        
-                        if response.status_code == 200:
-                            data = response.json()
-                            st.success(f"✅ Uploaded {data['data']['count']} files")
-                        else:
-                            st.error(f"❌ Upload failed: {response.json().get('detail')}")
-                    except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
-            
-            st.divider()
-            
-            # Knowledge Base Section
-            st.subheader("🧠 Knowledge Base")
-            
-            force_rebuild = st.checkbox(
-                "Force Rebuild",
-                help="Rebuild even if embeddings exist"
-            )
-            
-            if st.button("🔨 Build/Update KB", key="update_kb_btn", use_container_width=True):
-                with st.spinner("Processing logs and building embeddings..."):
-                    try:
-                        response = requests.post(
-                            f"{api_base_url}/update_kb",
-                            json={
-                                "issue_id": st.session_state.current_issue,
-                                "embedding_model": st.session_state.embedding_model,
-                                "force": force_rebuild
-                            }
-                        )
-                        
-                        if response.status_code == 200:
-                            data = response.json()
-                            st.success(f"✅ KB updated! {data['data']['chunks']} chunks processed")
-                            st.info(f"📐 Using: {data['data']['embedding_model']}")
-                        else:
-                            st.error(f"❌ {response.json().get('detail', 'Error updating KB')}")
-                    except Exception as e:
-                        st.error(f"❌ Error: {str(e)}")
-            
-            st.caption("⚠️ Build KB after uploading logs to enable queries")
+            # Knowledge Base Section - Compact
+            with st.expander("🧠 Knowledge Base", expanded=True):
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.markdown("**Build KB**")
+                with col2:
+                    force_rebuild = st.checkbox("🔄", help="Force rebuild", label_visibility="collapsed")
+                
+                if st.button("🔨 Build/Update", key="update_kb_btn", use_container_width=True):
+                    with st.spinner("Building..."):
+                        try:
+                            response = requests.post(
+                                f"{api_base_url}/update_kb",
+                                json={
+                                    "issue_id": st.session_state.current_issue,
+                                    "embedding_model": st.session_state.embedding_model,
+                                    "force": force_rebuild
+                                }
+                            )
+                            
+                            if response.status_code == 200:
+                                data = response.json()
+                                st.success(f"✅ {data['data']['chunks']} chunks")
+                            else:
+                                st.error(f"❌ {response.json().get('detail', 'Error')}")
+                        except Exception as e:
+                            st.error(f"❌ {str(e)}")
+                
+                st.caption("⚠️ Required before queries")
+        
+        st.divider()
+        
+        # Clear Chat History Section
+        if st.session_state.current_issue:
+            with st.expander("⚠️ Danger Zone"):
+                st.warning("**Clear Chat History**\n\nThis will permanently delete all chat messages for this issue.")
+                
+                if 'confirm_clear' not in st.session_state:
+                    st.session_state.confirm_clear = False
+                
+                if not st.session_state.confirm_clear:
+                    if st.button("🗑️ Clear History", key="clear_history_btn", use_container_width=True):
+                        st.session_state.confirm_clear = True
+                        st.rerun()
+                else:
+                    st.error("Are you sure? This cannot be undone!")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("✅ Yes, Clear", key="confirm_clear_yes", use_container_width=True):
+                            # Clear the chat history
+                            st.session_state.chat_history = []
+                            st.session_state.chat_loaded = False
+                            st.session_state.confirm_clear = False
+                            st.success("Chat history cleared!")
+                            st.rerun()
+                    with col2:
+                        if st.button("❌ Cancel", key="confirm_clear_no", use_container_width=True):
+                            st.session_state.confirm_clear = False
+                            st.rerun()
         
         st.divider()
         
