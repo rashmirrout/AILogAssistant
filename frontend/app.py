@@ -106,18 +106,22 @@ def _render_issue_header(api_base_url: str, issue_id: str):
     embedding = stats.get('embedding_model', 'N/A')
     llm = stats.get('llm_model_last_used', 'N/A')
     
-    # Shorten model names for badges
-    if 'gemini' in embedding.lower():
+    # Shorten model names for badges (with null checks)
+    if embedding and 'gemini' in embedding.lower():
         embedding = 'Gemini'
-    elif len(embedding) > 15:
+    elif embedding and len(embedding) > 15:
         embedding = embedding[:12] + '...'
+    elif not embedding:
+        embedding = 'N/A'
     
-    if 'flash' in llm.lower():
+    if llm and 'flash' in llm.lower():
         llm = 'Flash'
-    elif 'pro' in llm.lower():
+    elif llm and 'pro' in llm.lower():
         llm = 'Pro'
-    elif len(llm) > 15:
+    elif llm and len(llm) > 15:
         llm = llm[:12] + '...'
+    elif not llm:
+        llm = 'N/A'
     
     st.markdown(f"""
     <div style="display: flex; align-items: center; justify-content: space-between; 

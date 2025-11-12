@@ -1,0 +1,28 @@
+# Log Analytics Assistant Configuration
+
+# Chunking Configuration
+chunk_size: 800  # Number of characters per chunk
+overlap: 100     # Character overlap between chunks
+
+# Retrieval Configuration
+top_k: 5  # Number of top chunks to retrieve
+
+# Embedding Configuration
+embedding_default: "gemini:text-embedding-004"
+embedding_batch_size: 32
+
+# LLM Configuration
+#llm_default: "gemini-1.5-flash"
+llm_default: "azure:GPT-4.1"
+llm_temperature: 0.1
+llm_max_tokens: 2048
+
+# Log File Configuration
+log_extensions:
+  - ".log"
+  - ".txt"
+  - ".jsonl"
+
+# Performance Configuration
+max_chunk_cache_size: 10000
+enable_embedding_cache: true
