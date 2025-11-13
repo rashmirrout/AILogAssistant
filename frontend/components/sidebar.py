@@ -190,33 +190,70 @@ def render_sidebar(api_base_url: str):
             
             # Knowledge Base Section - Compact
             with st.expander("🧠 Knowledge Base", expanded=True):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.markdown("**Build KB**")
-                with col2:
-                    force_rebuild = st.checkbox("🔄", help="Force rebuild", label_visibility="collapsed")
+                # Check if KB is building
+                is_building = st.session_state.get('is_building_kb', False)
                 
-                if st.button("🔨 Build/Update", key="update_kb_btn", use_container_width=True):
-                    with st.spinner("Building..."):
-                        try:
-                            response = requests.post(
-                                f"{api_base_url}/update_kb",
-                                json={
-                                    "issue_id": st.session_state.current_issue,
-                                    "embedding_model": st.session_state.embedding_model,
-                                    "force": force_rebuild
-                                }
-                            )
+                # Try to get progress from backend
+                if st.session_state.current_issue:
+                    try:
+                        progress_response = requests.get(
+                            f"{api_base_url}/kb_build_progress/{st.session_state.current_issue}",
+                            timeout=1
+                        )
+                        if progress_response.status_code == 200:
+                            progress_data = progress_response.json()
+                            is_building = progress_data.get('is_building', False)
+                            st.session_state.is_building_kb = is_building
                             
-                            if response.status_code == 200:
-                                data = response.json()
-                                st.success(f"✅ {data['data']['chunks']} chunks")
-                            else:
-                                st.error(f"❌ {response.json().get('detail', 'Error')}")
-                        except Exception as e:
-                            st.error(f"❌ {str(e)}")
+                            # Display progress if building
+                            if is_building:
+                                st.markdown(f"**{progress_data.get('message', 'Building...')}**")
+                                st.progress(progress_data.get('percentage', 0) / 100)
+                                st.caption(f"Phase: {progress_data.get('phase', 'unknown')} • {progress_data.get('percentage', 0)}%")
+                    except:
+                        pass
                 
-                st.caption("⚠️ Required before queries")
+                if not is_building:
+                    col1, col2 = st.columns([3, 1])
+                    with col1:
+                        st.markdown("**Build KB**")
+                    with col2:
+                        force_rebuild = st.checkbox("🔄", help="Force rebuild", label_visibility="collapsed")
+                    
+                    if st.button("🔨 Build/Update", key="update_kb_btn", use_container_width=True, disabled=is_building):
+                        st.session_state.is_building_kb = True
+                        st.rerun()
+                
+                # Handle KB building in background
+                if is_building and not st.session_state.get('kb_build_started', False):
+                    st.session_state.kb_build_started = True
+                    try:
+                        response = requests.post(
+                            f"{api_base_url}/update_kb",
+                            json={
+                                "issue_id": st.session_state.current_issue,
+                                "embedding_model": st.session_state.embedding_model,
+                                "force": st.session_state.get('force_rebuild', False)
+                            },
+                            timeout=300  # 5 minute timeout
+                        )
+                        
+                        st.session_state.is_building_kb = False
+                        st.session_state.kb_build_started = False
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            st.success(f"✅ {data['data']['chunks']} chunks")
+                        else:
+                            st.error(f"❌ {response.json().get('detail', 'Error')}")
+                    except Exception as e:
+                        st.session_state.is_building_kb = False
+                        st.session_state.kb_build_started = False
+                        st.error(f"❌ {str(e)}")
+                    st.rerun()
+                
+                if not is_building:
+                    st.caption("⚠️ Required before queries")
         
         st.divider()
         

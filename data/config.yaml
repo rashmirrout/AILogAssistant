@@ -1,15 +1,15 @@
 # Log Analytics Assistant Configuration
 
 # Chunking Configuration
-chunk_size: 800  # Number of characters per chunk
-overlap: 100     # Character overlap between chunks
+chunk_size: 1500  # Number of characters per chunk (increased for performance)
+overlap: 150      # Character overlap between chunks
 
 # Retrieval Configuration
 top_k: 5  # Number of top chunks to retrieve
 
 # Embedding Configuration
 embedding_default: "gemini:text-embedding-004"
-embedding_batch_size: 32
+embedding_batch_size: 64  # Increased for better throughput
 
 # LLM Configuration
 #llm_default: "gemini-1.5-flash"

@@ -6,8 +6,10 @@ Supports caching and batch processing.
 import json
 import numpy as np
 from pathlib import Path
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Callable
 from datetime import datetime
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from backend.config import get_settings
 from backend.file_manager import FileManager
 from backend.log_parser import LogParser
@@ -22,7 +24,7 @@ class EmbeddingEngine:
         self.file_manager = FileManager()
         self.log_parser = LogParser()
     
-    def build_embeddings(self, issue_id: str, embedding_model: Optional[str] = None, force: bool = False):
+    def build_embeddings(self, issue_id: str, embedding_model: Optional[str] = None, force: bool = False, progress_callback: Optional[Callable[[dict], None]] = None):
         """
         Build embeddings for all chunks in an issue.
         
@@ -30,6 +32,7 @@ class EmbeddingEngine:
             issue_id: Issue ID
             embedding_model: Model to use (defaults to config setting)
             force: Force rebuild even if embeddings exist
+            progress_callback: Optional callback function for progress updates
         """
         if not self.file_manager.issue_exists(issue_id):
             raise FileNotFoundError(f"Issue {issue_id} does not exist")
@@ -52,6 +55,14 @@ class EmbeddingEngine:
             print(f"Embedding model changed from {metadata.embedding_model} to {model_name}, rebuilding...")
             force = True
         
+        # Progress: Loading chunks
+        if progress_callback:
+            progress_callback({
+                "phase": "loading",
+                "message": "Loading chunks...",
+                "percentage": 5
+            })
+        
         # Load chunks
         chunks = self.log_parser.load_chunks(issue_id)
         
@@ -60,6 +71,14 @@ class EmbeddingEngine:
         
         # Get embedding strategy
         strategy = ModelRegistry.get_embedding_strategy(model_name, self.settings.gemini_api_key)
+        
+        # Progress: Checking cache
+        if progress_callback:
+            progress_callback({
+                "phase": "cache",
+                "message": "Checking cache...",
+                "percentage": 10
+            })
         
         # Load cache if not forcing rebuild
         cache = {}
@@ -89,6 +108,17 @@ class EmbeddingEngine:
             new_embeddings = []
             
             for batch_idx, batch in enumerate(batches):
+                # Progress update for each batch
+                batch_progress = 15 + int((batch_idx / len(batches)) * 70)  # 15-85%
+                if progress_callback:
+                    progress_callback({
+                        "phase": "embedding",
+                        "message": f"Generating embeddings (batch {batch_idx + 1}/{len(batches)})...",
+                        "percentage": batch_progress,
+                        "current_batch": batch_idx + 1,
+                        "total_batches": len(batches)
+                    })
+                
                 print(f"Processing batch {batch_idx + 1}/{len(batches)}")
                 batch_embeddings = strategy.embed_texts(batch)
                 new_embeddings.extend(batch_embeddings)
@@ -98,6 +128,14 @@ class EmbeddingEngine:
                 chunk = chunks[text_idx]
                 text_hash = chunk.metadata.get("text_hash") or compute_text_hash(chunk.text)
                 cache[text_hash] = new_embeddings[idx].tolist()
+        
+        # Progress: Finalizing
+        if progress_callback:
+            progress_callback({
+                "phase": "finalizing",
+                "message": "Finalizing embeddings...",
+                "percentage": 90
+            })
         
         # Reconstruct full embeddings array in correct order
         final_embeddings = []
@@ -135,6 +173,14 @@ class EmbeddingEngine:
         })
         
         self.file_manager.save_metadata(issue_id, metadata)
+        
+        # Progress: Complete
+        if progress_callback:
+            progress_callback({
+                "phase": "complete",
+                "message": f"Successfully built {len(chunks)} chunks",
+                "percentage": 100
+            })
         
         print(f"Successfully built embeddings for {len(chunks)} chunks")
     

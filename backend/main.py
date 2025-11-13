@@ -48,6 +48,9 @@ _embedding_engine = None
 _rag_engine = None
 _session_manager = None
 
+# Global progress tracking
+_kb_build_progress = {}
+
 # Initialize models on startup
 def initialize_models():
     """Initialize and register available models based on configuration."""
@@ -196,22 +199,52 @@ async def update_kb(request: UpdateKBRequest):
         if not get_file_manager().issue_exists(request.issue_id):
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Issue {request.issue_id} not found")
         
+        # Initialize progress
+        _kb_build_progress[request.issue_id] = {
+            "phase": "parsing",
+            "message": "Parsing logs...",
+            "percentage": 0,
+            "is_building": True
+        }
+        
         # Parse and chunk logs
         chunks = get_log_parser().parse_and_chunk(request.issue_id)
         
         if not chunks:
+            _kb_build_progress[request.issue_id] = {
+                "phase": "error",
+                "message": "No logs found to parse",
+                "percentage": 0,
+                "is_building": False
+            }
             return StatusResponse(
                 success=False,
                 message="No logs found to parse",
                 data={"chunks": 0}
             )
         
-        # Build embeddings
+        # Progress callback for embeddings
+        def progress_callback(progress_data: dict):
+            _kb_build_progress[request.issue_id] = {
+                **progress_data,
+                "is_building": True
+            }
+        
+        # Build embeddings with progress tracking
         get_embedding_engine().build_embeddings(
             issue_id=request.issue_id,
             embedding_model=request.embedding_model,
-            force=request.force
+            force=request.force,
+            progress_callback=progress_callback
         )
+        
+        # Mark as complete
+        _kb_build_progress[request.issue_id] = {
+            "phase": "complete",
+            "message": f"Successfully built {len(chunks)} chunks",
+            "percentage": 100,
+            "is_building": False
+        }
         
         return StatusResponse(
             success=True,
@@ -224,7 +257,27 @@ async def update_kb(request: UpdateKBRequest):
     except HTTPException:
         raise
     except Exception as e:
+        # Mark as error
+        if request.issue_id in _kb_build_progress:
+            _kb_build_progress[request.issue_id] = {
+                "phase": "error",
+                "message": str(e),
+                "percentage": 0,
+                "is_building": False
+            }
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@app.get("/kb_build_progress/{issue_id}")
+async def get_kb_build_progress(issue_id: str):
+    """Get knowledge base build progress for an issue."""
+    if issue_id not in _kb_build_progress:
+        return {
+            "phase": "idle",
+            "message": "No build in progress",
+            "percentage": 0,
+            "is_building": False
+        }
+    return _kb_build_progress[issue_id]
 
 @app.post("/query", response_model=QueryResponse)
 async def query(request: QueryRequest):
